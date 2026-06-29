@@ -36,6 +36,7 @@ export default function Home() {
             input={chat.input}
             setInput={chat.setInput}
             loading={chat.loading}
+            planning={chat.planning}
             isReady={chat.isReady}
             waitingForApproval={chat.waitingForApproval}
             proposedPlan={chat.proposedPlan}

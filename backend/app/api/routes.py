@@ -6,8 +6,8 @@ from app.agents.graph import compiled_graph
 router = APIRouter()
 
 class ChatRequest(BaseModel):
-    thread_id: str  # ID único de conversación/proyecto (ej: "proyecto_123")
-    message: str    # Mensaje enviado por el usuario
+    thread_id: str
+    message: str
 
 class ApprovePlanRequest(BaseModel):
     thread_id: str
@@ -17,8 +17,8 @@ class ApprovePlanRequest(BaseModel):
 @router.post("/chat")
 async def chat_with_triage(request: ChatRequest):
     """
-    Endpoint para interactuar en tiempo real con el Triage Agent.
-    Mantiene el estado y el historial usando el thread_id provisto.
+    Solo ejecuta el nodo de Triage. Nunca avanza al Planner.
+    Si is_ready_for_planning=True, el frontend debe llamar a /api/plan.
     """
     try:
         config = {"configurable": {"thread_id": request.thread_id}}
@@ -31,19 +31,44 @@ async def chat_with_triage(request: ChatRequest):
 
         last_message = final_state["messages"][-1].content
 
-        response_data = {
+        return {
             "response": last_message,
             "is_ready_for_planning": final_state.get("is_ready_for_planning", False),
             "final_idea": final_state.get("final_idea"),
         }
 
-        proposed_plan = final_state.get("proposed_plan")
-        if proposed_plan:
-            response_data["proposed_plan"] = proposed_plan
-            response_data["plan_approved"] = final_state.get("plan_approved", False)
-            response_data["waiting_for_approval"] = True
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        return response_data
+
+@router.post("/plan")
+async def generate_plan(request: ChatRequest):
+    """
+    Ejecuta el nodo Planner. El frontend llama a este endpoint solo cuando
+    is_ready_for_planning=True. El LLM del planner puede tardar.
+    """
+    try:
+        config = {"configurable": {"thread_id": request.thread_id}}
+
+        stored_state = compiled_graph.get_state(config)
+        stored_messages = stored_state.values.get("messages", [])
+
+        input_data = {
+            "messages": [("user", request.message)],
+            "is_ready_for_planning": True,
+            "messages": stored_messages,
+        }
+
+        final_state = compiled_graph.invoke(input_data, config=config)
+
+        proposed_plan = final_state.get("proposed_plan")
+
+        return {
+            "proposed_plan": proposed_plan,
+            "plan_approved": final_state.get("plan_approved", False),
+            "waiting_for_approval": True,
+            "final_idea": final_state.get("final_idea"),
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -51,9 +76,6 @@ async def chat_with_triage(request: ChatRequest):
 
 @router.post("/approve-plan")
 async def approve_plan(request: ApprovePlanRequest):
-    """
-    Endpoint para aprobar o solicitar cambios en el plan propuesto (Gate 1).
-    """
     try:
         config = {"configurable": {"thread_id": request.thread_id}}
 

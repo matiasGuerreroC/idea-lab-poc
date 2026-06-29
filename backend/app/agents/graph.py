@@ -20,17 +20,7 @@ def route_after_triage(state: SoftwareFactoryState):
         return "planner"
     return END
 
-workflow.add_conditional_edges(
-    "triage",
-    route_after_triage,
-    {
-        "planner": "planner",
-        "END": END
-    }
-)
-
-# 5. Después de planificar, el grafo finaliza para la pausa humana
-workflow.add_edge("planner", END)
+workflow.add_conditional_edges("triage", route_after_triage)
 
 # 6. Compilar el grafo con persistencia y pausa automática tras planificar
 memory = MemorySaver()

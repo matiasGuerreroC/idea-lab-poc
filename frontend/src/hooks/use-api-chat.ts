@@ -16,13 +16,29 @@ interface TaskItem {
   deliverable: string | null;
 }
 
-const API_URL = "http://127.0.0.1:8000/api/chat";
-const APPROVE_URL = "http://127.0.0.1:8000/api/approve-plan";
+const API_URL = "http://127.0.0.1:8000/api";
+const TIMEOUT_MS = 120_000;
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export function useApiChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [planning, setPlanning] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [finalIdea, setFinalIdea] = useState<string | null>(null);
   const [proposedPlan, setProposedPlan] = useState<TaskItem[] | null>(null);
@@ -49,7 +65,7 @@ export function useApiChat() {
   const sendMessage = useCallback(
     async (text?: string) => {
       const messageText = text || input;
-      if (!messageText.trim() || loading || isReady || waitingForApproval) return;
+      if (!messageText.trim() || loading || planning || isReady || waitingForApproval) return;
 
       const userText = messageText.trim();
       setInput("");
@@ -59,49 +75,94 @@ export function useApiChat() {
       addMessage("user", userText);
 
       try {
-        const response = await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ thread_id: threadId, message: userText }),
-        });
+        // Paso 1: Solo Triage
+        const triageResponse = await fetchWithTimeout(
+          `${API_URL}/chat`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ thread_id: threadId, message: userText }),
+          },
+          TIMEOUT_MS
+        );
 
-        if (!response.ok) throw new Error("Error al conectar con el backend.");
-
-        const data = await response.json();
-
-        addMessage("assistant", data.response);
-        setIsReady(data.is_ready_for_planning);
-        if (data.final_idea) setFinalIdea(data.final_idea);
-
-        if (data.waiting_for_approval) {
-          setWaitingForApproval(true);
-          if (data.proposed_plan) setProposedPlan(data.proposed_plan);
-          if (data.plan_approved !== undefined) setPlanApproved(data.plan_approved);
+        if (!triageResponse.ok) {
+          const errBody = await triageResponse.json().catch(() => ({}));
+          throw new Error(errBody.detail || "Error en el servidor.");
         }
-      } catch (err) {
+
+        const triageData = await triageResponse.json();
+
+        addMessage("assistant", triageData.response);
+        setIsReady(triageData.is_ready_for_planning);
+
+        if (triageData.final_idea) {
+          setFinalIdea(triageData.final_idea);
+        }
+
+        // Paso 2: Si la idea está lista, llamar al Planner
+        if (triageData.is_ready_for_planning) {
+          addMessage("assistant", "Generando plan de trabajo... esto puede tomar unos segundos.");
+          setPlanning(true);
+
+          const planResponse = await fetchWithTimeout(
+            `${API_URL}/plan`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ thread_id: threadId, message: "" }),
+            },
+            TIMEOUT_MS
+          );
+
+          if (!planResponse.ok) {
+            const errBody = await planResponse.json().catch(() => ({}));
+            throw new Error(errBody.detail || "Error al generar el plan.");
+          }
+
+          const planData = await planResponse.json();
+
+          setProposedPlan(planData.proposed_plan);
+          setWaitingForApproval(true);
+        }
+      } catch (err: any) {
         console.error(err);
-        setError(
-          "No se pudo conectar con el backend. Asegúrate de que esté corriendo en http://127.0.0.1:8000"
-        );
-        addMessage(
-          "assistant",
-          "Error de conexión: Asegúrate de que el backend esté corriendo en http://127.0.0.1:8000"
-        );
+
+        if (err.name === "AbortError") {
+          setError("La solicitud tardó demasiado. El servidor puede estar procesando una solicitud compleja.");
+          addMessage(
+            "assistant",
+            "La solicitud tardó demasiado. Por favor, intenta de nuevo o simplifica tu idea."
+          );
+        } else {
+          setError(
+            err.message || "No se pudo conectar con el backend. Asegúrate de que esté corriendo en http://127.0.0.1:8000"
+          );
+          addMessage(
+            "assistant",
+            `Error: ${err.message || "Error de conexión. Asegúrate de que el backend esté corriendo en http://127.0.0.1:8000"}`
+          );
+        }
       } finally {
         setLoading(false);
+        setPlanning(false);
       }
     },
-    [input, loading, isReady, waitingForApproval, threadId, addMessage]
+    [input, loading, planning, isReady, waitingForApproval, threadId, addMessage]
   );
 
   const approvePlan = useCallback(async () => {
     setApprovalLoading(true);
     try {
-      const response = await fetch(APPROVE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thread_id: threadId, approved: true }),
-      });
+      const response = await fetchWithTimeout(
+        `${API_URL}/approve-plan`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ thread_id: threadId, approved: true }),
+        },
+        TIMEOUT_MS
+      );
 
       if (!response.ok) throw new Error("Error al aprobar el plan.");
 
@@ -120,15 +181,19 @@ export function useApiChat() {
   const rejectPlan = useCallback(async () => {
     setApprovalLoading(true);
     try {
-      const response = await fetch(APPROVE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          thread_id: threadId,
-          approved: false,
-          feedback: feedback || "El usuario solicitó cambios generales.",
-        }),
-      });
+      const response = await fetchWithTimeout(
+        `${API_URL}/approve-plan`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            thread_id: threadId,
+            approved: false,
+            feedback: feedback || "El usuario solicitó cambios generales.",
+          }),
+        },
+        TIMEOUT_MS
+      );
 
       if (!response.ok) throw new Error("Error al rechazar el plan.");
 
@@ -161,6 +226,7 @@ export function useApiChat() {
     setProposedPlan(null);
     setPlanApproved(false);
     setWaitingForApproval(false);
+    setPlanning(false);
     setFeedback("");
     setError(null);
     setInput("");
@@ -171,6 +237,7 @@ export function useApiChat() {
     input,
     setInput,
     loading,
+    planning,
     isReady,
     finalIdea,
     proposedPlan,

@@ -34,6 +34,7 @@ interface ChatBoxProps {
   approvePlan: () => void;
   rejectPlan: () => void;
   threadId: string;
+  planning: boolean;
 }
 
 export function ChatBox({
@@ -52,6 +53,7 @@ export function ChatBox({
   approvePlan,
   rejectPlan,
   threadId,
+  planning,
 }: ChatBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -162,6 +164,25 @@ export function ChatBox({
                   Solicitar Cambios
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {planning && (
+          <div className="flex gap-3">
+            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+              <Loader2 className="w-4 h-4 text-slate-500 dark:text-slate-400 animate-spin" />
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl rounded-bl-md px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 text-amber-500 animate-spin" />
+                <span className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                  Generando plan de trabajo...
+                </span>
+              </div>
+              <p className="text-xs text-amber-500 dark:text-amber-500 mt-1">
+                El agente está analizando tu idea y estructurando las tareas técnicas.
+              </p>
             </div>
           </div>
         )}
