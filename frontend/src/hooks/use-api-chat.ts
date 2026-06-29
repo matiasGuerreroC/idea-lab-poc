@@ -24,10 +24,7 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
+    const response = await fetch(url, { ...options, signal: controller.signal });
     return response;
   } finally {
     clearTimeout(timer);
@@ -48,7 +45,23 @@ export function useApiChat() {
   const [feedback, setFeedback] = useState("");
   const [threadId, setThreadId] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  // Estado de Fase 3
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
+  const [waitingForTaskApproval, setWaitingForTaskApproval] = useState(false);
+  const [taskApprovalLoading, setTaskApprovalLoading] = useState(false);
+  const [taskFeedback, setTaskFeedback] = useState("");
+  const [executingTask, setExecutingTask] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const baseDeliverable: string | null =
+    waitingForTaskApproval && tasks[currentTaskIndex]?.deliverable
+      ? tasks[currentTaskIndex].deliverable
+      : null;
+
+  const currentDeliverable: string | null = executingTask ? null : baseDeliverable;
 
   useEffect(() => {
     setThreadId(`test-thread-${Math.floor(Math.random() * 100000)}`);
@@ -65,7 +78,7 @@ export function useApiChat() {
   const sendMessage = useCallback(
     async (text?: string) => {
       const messageText = text || input;
-      if (!messageText.trim() || loading || planning || isReady || waitingForApproval) return;
+      if (!messageText.trim() || loading || planning || isReady || waitingForApproval || waitingForTaskApproval) return;
 
       const userText = messageText.trim();
       setInput("");
@@ -75,7 +88,6 @@ export function useApiChat() {
       addMessage("user", userText);
 
       try {
-        // Paso 1: Solo Triage
         const triageResponse = await fetchWithTimeout(
           `${API_URL}/chat`,
           {
@@ -100,7 +112,6 @@ export function useApiChat() {
           setFinalIdea(triageData.final_idea);
         }
 
-        // Paso 2: Si la idea está lista, llamar al Planner
         if (triageData.is_ready_for_planning) {
           addMessage("assistant", "Generando plan de trabajo... esto puede tomar unos segundos.");
           setPlanning(true);
@@ -129,37 +140,30 @@ export function useApiChat() {
         console.error(err);
 
         if (err.name === "AbortError") {
-          setError("La solicitud tardó demasiado. El servidor puede estar procesando una solicitud compleja.");
-          addMessage(
-            "assistant",
-            "La solicitud tardó demasiado. Por favor, intenta de nuevo o simplifica tu idea."
-          );
+          setError("La solicitud tardó demasiado.");
+          addMessage("assistant", "La solicitud tardó demasiado. Por favor, intenta de nuevo.");
         } else {
-          setError(
-            err.message || "No se pudo conectar con el backend. Asegúrate de que esté corriendo en http://127.0.0.1:8000"
-          );
-          addMessage(
-            "assistant",
-            `Error: ${err.message || "Error de conexión. Asegúrate de que el backend esté corriendo en http://127.0.0.1:8000"}`
-          );
+          setError(err.message || "Error de conexión.");
+          addMessage("assistant", `Error: ${err.message || "Error de conexión."}`);
         }
       } finally {
         setLoading(false);
         setPlanning(false);
       }
     },
-    [input, loading, planning, isReady, waitingForApproval, threadId, addMessage]
+    [input, loading, planning, isReady, waitingForApproval, waitingForTaskApproval, threadId, addMessage]
   );
 
   const approvePlan = useCallback(async () => {
     setApprovalLoading(true);
+    setExecutingTask(true);
     try {
       const response = await fetchWithTimeout(
         `${API_URL}/approve-plan`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ thread_id: threadId, approved: true }),
+          body: JSON.stringify({ thread_id: threadId, approve: true }),
         },
         TIMEOUT_MS
       );
@@ -167,16 +171,22 @@ export function useApiChat() {
       if (!response.ok) throw new Error("Error al aprobar el plan.");
 
       const data = await response.json();
-      addMessage("assistant", data.message);
       setPlanApproved(true);
       setWaitingForApproval(false);
+
+      if (data.tasks && data.tasks.length > 0) {
+        setTasks(data.tasks);
+        setCurrentTaskIndex(data.current_task_index || 0);
+        setWaitingForTaskApproval(true);
+      }
     } catch (err) {
       console.error(err);
       setError("Error al aprobar el plan.");
     } finally {
       setApprovalLoading(false);
+      setExecutingTask(false);
     }
-  }, [threadId, addMessage]);
+  }, [threadId]);
 
   const rejectPlan = useCallback(async () => {
     setApprovalLoading(true);
@@ -188,7 +198,7 @@ export function useApiChat() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             thread_id: threadId,
-            approved: false,
+            approve: false,
             feedback: feedback || "El usuario solicitó cambios generales.",
           }),
         },
@@ -197,8 +207,6 @@ export function useApiChat() {
 
       if (!response.ok) throw new Error("Error al rechazar el plan.");
 
-      const data = await response.json();
-      addMessage("assistant", data.message);
       setPlanApproved(false);
       setWaitingForApproval(false);
       setProposedPlan(null);
@@ -210,7 +218,79 @@ export function useApiChat() {
     } finally {
       setApprovalLoading(false);
     }
-  }, [threadId, feedback, addMessage]);
+  }, [threadId, feedback]);
+
+  const approveTask = useCallback(async () => {
+    setTaskApprovalLoading(true);
+    setExecutingTask(true);
+    setWaitingForTaskApproval(false);
+    try {
+      const response = await fetchWithTimeout(
+        `${API_URL}/approve-task`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ thread_id: threadId, approve: true }),
+        },
+        TIMEOUT_MS
+      );
+
+      if (!response.ok) throw new Error("Error al aprobar la tarea.");
+
+      const data = await response.json();
+
+      if (data.tasks) setTasks(data.tasks);
+      const nextIndex = data.current_task_index || 0;
+
+      if (nextIndex >= data.tasks?.length) {
+        setCurrentTaskIndex(nextIndex);
+        addMessage("assistant", "Todas las tareas han sido completadas. ¡Proyecto finalizado!");
+      } else {
+        setCurrentTaskIndex(nextIndex);
+        setWaitingForTaskApproval(true);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Error al aprobar la tarea.");
+    } finally {
+      setTaskApprovalLoading(false);
+      setExecutingTask(false);
+    }
+  }, [threadId, addMessage]);
+
+  const rejectTask = useCallback(async () => {
+    setTaskApprovalLoading(true);
+    setExecutingTask(true);
+    setWaitingForTaskApproval(false);
+    try {
+      const response = await fetchWithTimeout(
+        `${API_URL}/approve-task`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            thread_id: threadId,
+            approve: false,
+            feedback: taskFeedback || "El usuario solicitó cambios.",
+          }),
+        },
+        TIMEOUT_MS
+      );
+
+      if (!response.ok) throw new Error("Error al rechazar la tarea.");
+
+      const data = await response.json();
+      if (data.tasks) setTasks(data.tasks);
+      setWaitingForTaskApproval(true);
+      setTaskFeedback("");
+    } catch (err) {
+      console.error(err);
+      setError("Error al rechazar la tarea.");
+    } finally {
+      setTaskApprovalLoading(false);
+      setExecutingTask(false);
+    }
+  }, [threadId, taskFeedback]);
 
   const resetChat = useCallback(() => {
     setThreadId(`test-thread-${Math.floor(Math.random() * 100000)}`);
@@ -226,10 +306,15 @@ export function useApiChat() {
     setProposedPlan(null);
     setPlanApproved(false);
     setWaitingForApproval(false);
+    setWaitingForTaskApproval(false);
     setPlanning(false);
     setFeedback("");
+    setTaskFeedback("");
+    setTasks([]);
+    setCurrentTaskIndex(0);
     setError(null);
     setInput("");
+    setExecutingTask(false);
   }, []);
 
   return {
@@ -253,5 +338,15 @@ export function useApiChat() {
     approvePlan,
     rejectPlan,
     resetChat,
+    tasks,
+    currentTaskIndex,
+    waitingForTaskApproval,
+    taskApprovalLoading,
+    taskFeedback,
+    setTaskFeedback,
+    currentDeliverable,
+    executingTask,
+    approveTask,
+    rejectTask,
   };
 }

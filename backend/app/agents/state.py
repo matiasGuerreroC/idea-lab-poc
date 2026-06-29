@@ -21,3 +21,12 @@ class SoftwareFactoryState(TypedDict):
 
     # Indica si el usuario ha aprobado el plan (Gate 1)
     plan_approved: bool
+
+    # Lista oficial de tareas a ejecutar (copia del plan aprobado)
+    tasks: Optional[list[dict]]
+
+    # Índice de la tarea actual en ejecución
+    current_task_index: int
+
+    # Feedback correctivo del humano o del reflector QA
+    human_feedback: Optional[str]

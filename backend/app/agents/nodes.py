@@ -1,6 +1,6 @@
 from langchain_core.messages import SystemMessage, AIMessage
 from app.agents.state import SoftwareFactoryState
-from app.agents.prompts import TRIAGE_SYSTEM_PROMPT, TriageResult, PLANNER_SYSTEM_PROMPT, ProposedPlan
+from app.agents.prompts import TRIAGE_SYSTEM_PROMPT, TriageResult, PLANNER_SYSTEM_PROMPT, ProposedPlan, EXECUTOR_SYSTEM_PROMPT, REFLECTOR_SYSTEM_PROMPT, QAResult
 from app.core.llm import get_llm
 from app.core.config import settings
 
@@ -67,4 +67,66 @@ def planner_node(state: SoftwareFactoryState) -> dict:
     return {
         "proposed_plan": tasks_dict_list,
         "plan_approved": False
+    }
+
+
+def executor_node(state: SoftwareFactoryState) -> dict:
+    """Ejecuta y genera el entregable técnico para la tarea actual."""
+    llm = get_llm(settings.EXECUTOR_PROVIDER, settings.EXECUTOR_MODEL)
+
+    tasks = state.get("tasks", [])
+    idx = state.get("current_task_index", 0)
+
+    if idx >= len(tasks):
+        return {}
+
+    current_task = tasks[idx]
+    final_idea = state.get("final_idea", "")
+    feedback = state.get("human_feedback", "")
+
+    prompt = EXECUTOR_SYSTEM_PROMPT.format(
+        final_idea=final_idea,
+        task_title=current_task["title"],
+        task_description=current_task["description"]
+    )
+
+    messages = [SystemMessage(content=prompt)]
+
+    if feedback:
+        messages.append(SystemMessage(content=f"ATENCIÓN: Corrige el diseño considerando este feedback anterior: {feedback}"))
+
+    response = llm.invoke(messages)
+
+    updated_tasks = list(tasks)
+    updated_tasks[idx] = {**current_task, "deliverable": response.content, "status": "in_progress"}
+
+    return {
+        "tasks": updated_tasks,
+        "human_feedback": None
+    }
+
+
+def reflector_node(state: SoftwareFactoryState) -> dict:
+    """Realiza control de calidad automatizado del entregable generado."""
+    llm = get_llm(settings.EXECUTOR_PROVIDER, settings.EXECUTOR_MODEL)
+    structured_llm = llm.with_structured_output(QAResult)
+
+    tasks = state.get("tasks", [])
+    idx = state.get("current_task_index", 0)
+    current_task = tasks[idx]
+
+    messages = [
+        SystemMessage(content=REFLECTOR_SYSTEM_PROMPT),
+        SystemMessage(content=f"Tarea a evaluar: {current_task['title']}\nEntregable generado:\n{current_task['deliverable']}")
+    ]
+
+    qa_result: QAResult = structured_llm.invoke(messages)
+
+    if not qa_result.is_valid:
+        return {
+            "human_feedback": f"[QA IA RECHAZADO]: {qa_result.criticism}"
+        }
+
+    return {
+        "human_feedback": None
     }

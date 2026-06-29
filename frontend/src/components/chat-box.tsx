@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Send, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Send, Loader2, CheckCircle2, XCircle, Layers } from "lucide-react";
 import { ChatMessage } from "./chat-message";
+import { DeliverableView } from "./deliverable-view";
 
 interface Message {
   sender: "user" | "assistant";
@@ -23,6 +24,7 @@ interface ChatBoxProps {
   input: string;
   setInput: (value: string) => void;
   loading: boolean;
+  planning: boolean;
   isReady: boolean;
   waitingForApproval: boolean;
   proposedPlan: TaskItem[] | null;
@@ -34,7 +36,16 @@ interface ChatBoxProps {
   approvePlan: () => void;
   rejectPlan: () => void;
   threadId: string;
-  planning: boolean;
+  waitingForTaskApproval: boolean;
+  tasks: TaskItem[];
+  currentTaskIndex: number;
+  currentDeliverable: string | null;
+  taskApprovalLoading: boolean;
+  executingTask: boolean;
+  taskFeedback: string;
+  setTaskFeedback: (value: string) => void;
+  approveTask: () => void;
+  rejectTask: () => void;
 }
 
 export function ChatBox({
@@ -42,6 +53,7 @@ export function ChatBox({
   input,
   setInput,
   loading,
+  planning,
   isReady,
   waitingForApproval,
   proposedPlan,
@@ -53,7 +65,16 @@ export function ChatBox({
   approvePlan,
   rejectPlan,
   threadId,
-  planning,
+  waitingForTaskApproval,
+  tasks,
+  currentTaskIndex,
+  currentDeliverable,
+  taskApprovalLoading,
+  executingTask,
+  taskFeedback,
+  setTaskFeedback,
+  approveTask,
+  rejectTask,
 }: ChatBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -74,11 +95,18 @@ export function ChatBox({
     }
   }, [input]);
 
+  const currentTask = tasks[currentTaskIndex];
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-slate-950">
       <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-600 dark:to-blue-700">
         <h1 className="text-lg font-bold text-white tracking-tight">
-          Idea Lab - {waitingForApproval ? "Planificación" : "Triage"}
+          Idea Lab -{" "}
+          {waitingForTaskApproval
+            ? "Entregable Técnico"
+            : waitingForApproval
+            ? "Planificación"
+            : "Triage"}
         </h1>
         <p className="text-xs text-blue-100 font-mono">
           Conversación: {threadId}
@@ -99,7 +127,7 @@ export function ChatBox({
           <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 space-y-4">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-                <CheckCircle2 className="w-4 h-4 text-white" />
+                <Layers className="w-4 h-4 text-white" />
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
@@ -168,6 +196,79 @@ export function ChatBox({
           </div>
         )}
 
+        {executingTask && (
+          <div className="flex gap-3">
+            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+              <Loader2 className="w-4 h-4 text-slate-500 dark:text-slate-400 animate-spin" />
+            </div>
+            <div className="bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 rounded-2xl rounded-bl-md px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 text-violet-500 animate-spin" />
+                <span className="text-sm text-violet-700 dark:text-violet-400 font-medium">
+                  Generando entregable técnico...
+                </span>
+              </div>
+              <p className="text-xs text-violet-500 dark:text-violet-500 mt-1">
+                El agente está diseñando la solución y realizando control de calidad.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {waitingForTaskApproval && currentDeliverable && currentTask && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-violet-500 flex items-center justify-center">
+                <CheckCircle2 className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-violet-700 dark:text-violet-300">
+                  {currentTask.title}
+                </h3>
+                <p className="text-xs text-violet-500 dark:text-violet-400">
+                  Tarea {currentTaskIndex + 1} de {tasks.length}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+              <DeliverableView content={currentDeliverable} />
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 space-y-3">
+              <textarea
+                value={taskFeedback}
+                onChange={(e) => setTaskFeedback(e.target.value)}
+                placeholder="Si necesitas cambios en este entregable, describe qué modificar..."
+                rows={2}
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={approveTask}
+                  disabled={taskApprovalLoading}
+                  className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                >
+                  {taskApprovalLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  Aprobar Tarea
+                </button>
+                <button
+                  onClick={rejectTask}
+                  disabled={taskApprovalLoading}
+                  className="flex-1 flex items-center justify-center gap-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 text-red-600 dark:text-red-400 py-2.5 rounded-xl text-sm font-semibold transition-colors border border-red-200 dark:border-red-800"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Solicitar Cambios
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {planning && (
           <div className="flex gap-3">
             <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
@@ -217,9 +318,11 @@ export function ChatBox({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={loading || isReady || waitingForApproval}
+            disabled={loading || isReady || waitingForApproval || waitingForTaskApproval}
             placeholder={
-              waitingForApproval
+              waitingForTaskApproval
+                ? "Revisando entregable..."
+                : waitingForApproval
                 ? "Esperando aprobación del plan..."
                 : isReady
                 ? "Idea lista para planificación..."
@@ -230,7 +333,7 @@ export function ChatBox({
           />
           <button
             type="submit"
-            disabled={loading || isReady || waitingForApproval || !input.trim()}
+            disabled={loading || isReady || waitingForApproval || waitingForTaskApproval || !input.trim()}
             className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl flex items-center justify-center transition-colors"
           >
             {loading ? (

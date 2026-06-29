@@ -1,30 +1,53 @@
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from app.agents.state import SoftwareFactoryState
-from app.agents.nodes import triage_node, planner_node
+from app.agents.nodes import triage_node, planner_node, executor_node, reflector_node
 
-# 1. Inicializar el constructor de grafos con el esquema de nuestro Estado
 workflow = StateGraph(SoftwareFactoryState)
 
-# 2. Registrar los nodos
 workflow.add_node("triage", triage_node)
 workflow.add_node("planner", planner_node)
+workflow.add_node("executor", executor_node)
+workflow.add_node("reflector", reflector_node)
 
-# 3. Definir el punto de partida del flujo
 workflow.set_entry_point("triage")
 
-# 4. Transición condicional después del triage
+
 def route_after_triage(state: SoftwareFactoryState):
-    """Decide si continuar entrevistando o pasar al planificador."""
     if state.get("is_ready_for_planning", False):
         return "planner"
     return END
 
-workflow.add_conditional_edges("triage", route_after_triage)
 
-# 6. Compilar el grafo con persistencia y pausa automática tras planificar
+def route_task_loop(state: SoftwareFactoryState):
+    tasks = state.get("tasks", [])
+    idx = state.get("current_task_index", 0)
+    if idx >= len(tasks):
+        return END
+    return "executor"
+
+
+def route_after_reflector(state: SoftwareFactoryState):
+    feedback = state.get("human_feedback")
+    if feedback:
+        return "executor"
+    return END
+
+
+def route_after_planner(state: SoftwareFactoryState):
+    if state.get("plan_approved", False):
+        return "executor"
+    return END
+
+
+workflow.add_conditional_edges("triage", route_after_triage)
+workflow.add_conditional_edges("planner", route_after_planner, {"executor": "executor", END: END})
+
+workflow.add_conditional_edges("executor", lambda x: "reflector", {"reflector": "reflector"})
+workflow.add_conditional_edges("reflector", route_after_reflector)
+
 memory = MemorySaver()
 compiled_graph = workflow.compile(
     checkpointer=memory,
-    interrupt_after=["planner"]
+    interrupt_after=["planner", "reflector"]
 )

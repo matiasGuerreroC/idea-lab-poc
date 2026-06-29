@@ -17,13 +17,13 @@ class Settings(BaseSettings):
     GROQ_API_KEY: Optional[str] = None
 
     # Enrutamiento de modelos por agente
-    TRIAGE_PROVIDER: str = "gemini"
-    TRIAGE_MODEL: str = "gemini-2.5-flash"
+    TRIAGE_PROVIDER: str = "groq"
+    TRIAGE_MODEL: str = "llama-3.3-70b-versatile"
 
     PLANNER_PROVIDER: str = "groq"
-    PLANNER_MODEL: str = "llama-3.3-70b-specdec"
+    PLANNER_MODEL: str = "llama-3.3-70b-versatile"
 
-    EXECUTOR_PROVIDER: str = "gemini"
-    EXECUTOR_MODEL: str = "gemini-2.5-flash"
+    EXECUTOR_PROVIDER: str = "groq"
+    EXECUTOR_MODEL: str = "llama-3.3-70b-versatile"
 
 settings = Settings()

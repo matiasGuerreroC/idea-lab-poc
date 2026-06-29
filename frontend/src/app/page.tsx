@@ -48,6 +48,16 @@ export default function Home() {
             approvePlan={chat.approvePlan}
             rejectPlan={chat.rejectPlan}
             threadId={chat.threadId}
+            waitingForTaskApproval={chat.waitingForTaskApproval}
+            tasks={chat.tasks}
+            currentTaskIndex={chat.currentTaskIndex}
+            currentDeliverable={chat.currentDeliverable}
+            taskApprovalLoading={chat.taskApprovalLoading}
+            executingTask={chat.executingTask}
+            taskFeedback={chat.taskFeedback}
+            setTaskFeedback={chat.setTaskFeedback}
+            approveTask={chat.approveTask}
+            rejectTask={chat.rejectTask}
           />
         </div>
       </div>
