@@ -58,6 +58,7 @@ export default function Home() {
             setTaskFeedback={chat.setTaskFeedback}
             approveTask={chat.approveTask}
             rejectTask={chat.rejectTask}
+            finalSpecification={chat.finalSpecification}
           />
         </div>
       </div>

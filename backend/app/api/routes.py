@@ -95,6 +95,7 @@ async def approve_plan(request: PlanApprovalRequest):
         return {
             "tasks": final_state_dict.get("tasks", []),
             "current_task_index": final_state_dict.get("current_task_index", 0),
+            "final_specification": final_state_dict.get("final_specification"),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -132,6 +133,7 @@ async def approve_task(request: TaskApprovalRequest):
         return {
             "tasks": final_state_dict.get("tasks", []),
             "current_task_index": final_state_dict.get("current_task_index", 0),
+            "final_specification": final_state_dict.get("final_specification"),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

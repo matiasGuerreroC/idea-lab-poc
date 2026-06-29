@@ -1,6 +1,6 @@
 from langchain_core.messages import SystemMessage, AIMessage
 from app.agents.state import SoftwareFactoryState
-from app.agents.prompts import TRIAGE_SYSTEM_PROMPT, TriageResult, PLANNER_SYSTEM_PROMPT, ProposedPlan, EXECUTOR_SYSTEM_PROMPT, REFLECTOR_SYSTEM_PROMPT, QAResult
+from app.agents.prompts import TRIAGE_SYSTEM_PROMPT, TriageResult, PLANNER_SYSTEM_PROMPT, ProposedPlan, EXECUTOR_SYSTEM_PROMPT, REFLECTOR_SYSTEM_PROMPT, QAResult, CONSOLIDATOR_SYSTEM_PROMPT
 from app.core.llm import get_llm
 from app.core.config import settings
 
@@ -129,4 +129,30 @@ def reflector_node(state: SoftwareFactoryState) -> dict:
 
     return {
         "human_feedback": None
+    }
+
+
+def consolidator_node(state: SoftwareFactoryState) -> dict:
+    """Nodo de Consolidacion (Fase 4). Agrupa todos los entregables aprobados y genera un documento maestro."""
+    llm = get_llm(settings.EXECUTOR_PROVIDER, settings.EXECUTOR_MODEL)
+
+    tasks = state.get("tasks", [])
+    final_idea = state.get("final_idea", "")
+
+    deliverables_text = ""
+    for task in tasks:
+        deliverables_text += f"\n\n---\n## Tarea: {task['title']}\n"
+        deliverables_text += f"Descripcion Original: {task['description']}\n\n"
+        deliverables_text += f"Entregable Aprobado:\n{task.get('deliverable', 'No disponible.')}\n"
+
+    prompt = CONSOLIDATOR_SYSTEM_PROMPT.format(
+        final_idea=final_idea,
+        approved_deliverables=deliverables_text
+    )
+
+    messages = [SystemMessage(content=prompt)]
+    response = llm.invoke(messages)
+
+    return {
+        "final_specification": response.content
     }

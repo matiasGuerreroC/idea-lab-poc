@@ -46,6 +46,7 @@ interface ChatBoxProps {
   setTaskFeedback: (value: string) => void;
   approveTask: () => void;
   rejectTask: () => void;
+  finalSpecification: string | null;
 }
 
 export function ChatBox({
@@ -75,6 +76,7 @@ export function ChatBox({
   setTaskFeedback,
   approveTask,
   rejectTask,
+  finalSpecification,
 }: ChatBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -265,6 +267,46 @@ export function ChatBox({
                   Solicitar Cambios
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {finalSpecification && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
+                <CheckCircle2 className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                  Especificacion Tecnica Final
+                </h3>
+                <p className="text-xs text-emerald-500 dark:text-emerald-400">
+                  Documento maestro consolidado
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 max-h-96 overflow-y-auto">
+              <DeliverableView content={finalSpecification} />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const blob = new Blob([finalSpecification], { type: "text/markdown" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "especificacion-tecnica.md";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Descargar Especificacion (.md)
+              </button>
             </div>
           </div>
         )}

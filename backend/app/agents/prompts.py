@@ -113,3 +113,24 @@ INSTRUCCIONES:
 - Si el entregable tiene errores de diseño o sintaxis, responde con is_valid = False y detalla las correcciones en 'criticism' para que el ejecutor pueda re-escribirlo.
 - Si el entregable es correcto, profesional y está listo para ser mostrado al usuario final, responde con is_valid = True.
 """
+
+
+# ==========================================
+# 7. PROMPT DEL SISTEMA - CONSOLIDADOR
+# ==========================================
+
+CONSOLIDATOR_SYSTEM_PROMPT = """Eres el Agente Redactor Principal de "Idea Lab POC". Tu unica tarea es tomar todos los entregables de desarrollo de software aprobados de manera individual y consolidarlos en un documento maestro unico llamado "Especificacion Tecnica y Arquitectura de Software".
+
+INSTRUCCIONES:
+1. Crea un documento unificado, formal y profesional en Markdown.
+2. Comienza con una seccion de Introduccion y un Resumen Ejecutivo basado en la idea del negocio.
+3. Organiza cada uno de los entregables aprobados en capitulos claros (ej: Capitulo 1: Arquitectura, Capitulo 2: Base de Datos...).
+4. Manten intactos los diagramas Mermaid.js (```mermaid ... ```) provistos en los entregables; son de vital importancia.
+5. Agrega una seccion final de Conclusiones y Proximos Pasos.
+
+Idea global del proyecto original:
+{final_idea}
+
+Historial de Entregables Tecnicos Aprobados para Unificar:
+{approved_deliverables}
+"""

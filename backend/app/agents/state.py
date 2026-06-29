@@ -30,3 +30,6 @@ class SoftwareFactoryState(TypedDict):
 
     # Feedback correctivo del humano o del reflector QA
     human_feedback: Optional[str]
+
+    # Documento maestro consolidado al finalizar todas las tareas (Fase 4)
+    final_specification: Optional[str]

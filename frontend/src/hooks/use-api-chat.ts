@@ -54,6 +54,9 @@ export function useApiChat() {
   const [taskFeedback, setTaskFeedback] = useState("");
   const [executingTask, setExecutingTask] = useState(false);
 
+  // Estado de Fase 4
+  const [finalSpecification, setFinalSpecification] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const baseDeliverable: string | null =
@@ -242,7 +245,11 @@ export function useApiChat() {
       if (data.tasks) setTasks(data.tasks);
       const nextIndex = data.current_task_index || 0;
 
-      if (nextIndex >= data.tasks?.length) {
+      if (data.final_specification) {
+        setFinalSpecification(data.final_specification);
+        setCurrentTaskIndex(nextIndex);
+        addMessage("assistant", "¡Proyecto completado! La especificacion tecnica final esta lista.");
+      } else if (nextIndex >= data.tasks?.length) {
         setCurrentTaskIndex(nextIndex);
         addMessage("assistant", "Todas las tareas han sido completadas. ¡Proyecto finalizado!");
       } else {
@@ -315,6 +322,7 @@ export function useApiChat() {
     setError(null);
     setInput("");
     setExecutingTask(false);
+    setFinalSpecification(null);
   }, []);
 
   return {
@@ -346,6 +354,7 @@ export function useApiChat() {
     setTaskFeedback,
     currentDeliverable,
     executingTask,
+    finalSpecification,
     approveTask,
     rejectTask,
   };
