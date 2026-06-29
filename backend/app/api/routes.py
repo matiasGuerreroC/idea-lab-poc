@@ -120,7 +120,7 @@ async def approve_task(request: TaskApprovalRequest):
             compiled_graph.update_state(config, {
                 "tasks": updated_tasks,
                 "current_task_index": idx + 1,
-                "human_feedback": None
+                "human_feedback": "__APPROVED__"
             })
             final_state_dict = compiled_graph.invoke(None, config=config)
         else:

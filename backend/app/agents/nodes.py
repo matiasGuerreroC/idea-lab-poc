@@ -92,7 +92,7 @@ def executor_node(state: SoftwareFactoryState) -> dict:
 
     messages = [SystemMessage(content=prompt)]
 
-    if feedback:
+    if feedback and feedback != "__APPROVED__":
         messages.append(SystemMessage(content=f"ATENCIÓN: Corrige el diseño considerando este feedback anterior: {feedback}"))
 
     response = llm.invoke(messages)
