@@ -15,7 +15,7 @@ El sistema opera bajo el concepto **Human-in-the-Loop (HITL)**, deteniéndose en
 | Fase | Estado | Descripción |
 |------|--------|-------------|
 | 1. Triage & Entrevista | ✅ Implementada | Agente analiza la idea del usuario. Si falta información, inicia un chat interactivo para "aterrizar" la idea. Se valida que existan 3 pilares: propósito, audiencia y features clave. |
-| 2. Planificación | 🔲 Pendiente | Una vez madura la idea, un agente genera un plan de trabajo. El flujo se detiene (Gate 1) esperando aprobación o solicitud de cambios del usuario. |
+| 2. Planificación | ✅ Implementada | Una vez madura la idea, el agente Planner genera un plan de trabajo estructurado (3-4 tareas técnicas). El flujo se detiene (Gate 1) mostrando el plan al usuario para que lo apruebe o solicite cambios mediante el endpoint dedicado. |
 | 3. Ejecución & Reflexión | 🔲 Pendiente | Se desglosan tareas (arquitectura, modelo de datos, stack tecnológico). Un agente ejecutor diseña las soluciones y un agente Reflector las revisa antes de mostrarlas al usuario. |
 | 4. Aprobación de Entregables | 🔲 Pendiente | Cada componente técnico se detiene (Gate 2) para aprobación humana definitiva. Los resultados se renderizan visualmente con diagramas Mermaid.js en un dashboard interactivo. |
 
@@ -34,9 +34,19 @@ Monorepositorio con dos componentes principales:
 | LLMs | LangChain | Abstracción unificada para múltiples proveedores |
 | Persistencia | MemorySaver | Historial de conversaciones por `thread_id` |
 
-- **Endpoint principal:** `POST /api/chat` — Interacción con el Triage Agent
+- **Endpoints:**
+  - `POST /api/chat` — Interacción con el Triage Agent (solo triage, no ejecuta planner)
+  - `POST /api/plan` — Generación del plan de trabajo (llamado separado para evitar timeouts)
+  - `POST /api/approve-plan` — Aprobación o rechazo del plan propuesto (Gate 1)
+- **Ruteo condicional:** El grafo decide automáticamente si pasar al planner o seguir en triage según `is_ready_for_planning`
+- **Interrupción HITL:** LangGraph se detiene después del planner (`interrupt_after=["planner"]`) hasta que el usuario apruebe el plan
 - **Enrutamiento de modelos:** Cada agente (Triage, Planner, Executor) puede usar un proveedor y modelo diferente
-- **Estado global:** `SoftwareFactoryState` (TypedDict) con campos `messages`, `is_ready_for_planning`, `final_idea`
+- **Estado global:** `SoftwareFactoryState` (TypedDict) con campos:
+  - `messages` — Historial de la conversación
+  - `is_ready_for_planning` — Indica si la idea está madura
+  - `final_idea` — Resumen técnico de la idea
+  - `proposed_plan` — Lista de tareas del plan propuesto
+  - `plan_approved` — Control de aprobación humana (Gate 1)
 
 ### Frontend (`/frontend`)
 
@@ -47,9 +57,12 @@ Monorepositorio con dos componentes principales:
 | Iconos | Lucide React | Iconografía moderna y ligera |
 | Hook | `use-api-chat` | Lógica de estado, envío y reinicio del chat |
 
-- **Chat interactivo:** Input multilínea, indicador de escritura, timestamps
-- **Panel de control:** Timeline de progreso, resumen técnico, sidebar colapsable
+- **Chat interactivo:** Input multilínea, indicador de escritura, timestamps, mensaje de "Generando plan..." con timeout de 120s
+- **Aprobación de plan:** Sección de plan propuesto con tareas numeradas y botones de aprobar/solicitar cambios
+- **Panel de control:** Timeline de progreso (fase activa), plan de trabajo, resumen técnico, sidebar colapsable
+- **Flujo en dos pasos:** Primero triage (`/api/chat`), luego planificación (`/api/plan`) para evitar timeouts del LLM
 - **Toggle:** Cambio entre modo oscuro y claro
+- **AbortController:** Manejo de errores de red y timeout con mensajes amigables
 
 ---
 
@@ -184,7 +197,10 @@ idea-lab-poc/
 - [x] UI profesional con Tailwind CSS, dark/light mode, timeline de progreso
 - [x] Hook `use-api-chat` con manejo de estado y errores
 - [x] Factoría de LLMs multi-proveedor (Gemini / Groq)
-- [ ] Fase 2: Planner Agent con Gate 1 de aprobación
+- [x] Fase 2: Planner Agent con plan estructurado y Gate 1 de aprobación
+- [x] Endpoints `/api/plan` y `/api/approve-plan` con interrupt HITL
+- [x] UI de aprobación con tareas, botones de aprobar/rechazar y feedback
+- [x] Timeout de 120s y flujo en dos pasos para evitar cortes del LLM
 - [ ] Fase 3: Executor Agent con diagramas Mermaid.js
 - [ ] Fase 4: Aprobación de entregables con Gate 2
 - [ ] Integración de base de datos PostgreSQL (Neon)
