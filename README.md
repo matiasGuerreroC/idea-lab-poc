@@ -15,9 +15,8 @@ El sistema opera bajo el concepto **Human-in-the-Loop (HITL)**, deteniéndose en
 | Fase | Estado | Descripción |
 |------|--------|-------------|
 | 1. Triage & Entrevista | ✅ Implementada | Agente analiza la idea del usuario. Si falta información, inicia un chat interactivo para "aterrizar" la idea. Se valida que existan 3 pilares: propósito, audiencia y features clave. |
-| 2. Planificación | ✅ Implementada | Una vez madura la idea, el agente Planner genera un plan de trabajo estructurado (3-4 tareas técnicas). El flujo se detiene (Gate 1) mostrando el plan al usuario para que lo apruebe o solicite cambios mediante el endpoint dedicado. |
-| 3. Ejecución & Reflexión | 🔲 Pendiente | Se desglosan tareas (arquitectura, modelo de datos, stack tecnológico). Un agente ejecutor diseña las soluciones y un agente Reflector las revisa antes de mostrarlas al usuario. |
-| 4. Aprobación de Entregables | 🔲 Pendiente | Cada componente técnico se detiene (Gate 2) para aprobación humana definitiva. Los resultados se renderizan visualmente con diagramas Mermaid.js en un dashboard interactivo. |
+| 2. Planificación | ✅ Implementada | Una vez madura la idea, el agente Planner genera un plan de trabajo estructurado (3-4 tareas técnicas). El flujo se detiene (Gate 1) mostrando el plan al usuario para que lo apruebe o solicite cambios. |
+| 3. Ejecución, Reflexión & Gate 2 | ✅ Implementada | Cada tarea del plan es ejecutada por el agente Executor (genera entregable técnico con diagramas Mermaid.js). El agente Reflector realiza control de calidad automatizado (QA). Si el QA falla, el executor re-ejecuta la tarea automáticamente. Si pasa, el flujo se detiene (Gate 2) para aprobación humana. El usuario puede aprobar la tarea (avanza a la siguiente) o rechazarla con feedback (re-ejecuta el executor). |
 
 ---
 
@@ -38,8 +37,10 @@ Monorepositorio con dos componentes principales:
   - `POST /api/chat` — Interacción con el Triage Agent (solo triage, no ejecuta planner)
   - `POST /api/plan` — Generación del plan de trabajo (llamado separado para evitar timeouts)
   - `POST /api/approve-plan` — Aprobación o rechazo del plan propuesto (Gate 1)
-- **Ruteo condicional:** El grafo decide automáticamente si pasar al planner o seguir en triage según `is_ready_for_planning`
-- **Interrupción HITL:** LangGraph se detiene después del planner (`interrupt_after=["planner"]`) hasta que el usuario apruebe el plan
+  - `POST /api/approve-task` — Aprobación o rechazo del entregable de cada tarea (Gate 2)
+- **Ruteo condicional:** El grafo decide automáticamente si pasar al planner, ejecutor o seguir en triage según el estado
+- **Interrupción HITL:** LangGraph se detiene después del planner y del reflector (`interrupt_after=["planner", "reflector"]`) hasta que el usuario apruebe
+- **Bucle QA interno:** El agente Reflector valida cada entregable. Si el QA automatizado falla, el Executor re-ejecuta la tarea sin interrumpir al usuario
 - **Enrutamiento de modelos:** Cada agente (Triage, Planner, Executor) puede usar un proveedor y modelo diferente
 - **Estado global:** `SoftwareFactoryState` (TypedDict) con campos:
   - `messages` — Historial de la conversación
@@ -47,6 +48,9 @@ Monorepositorio con dos componentes principales:
   - `final_idea` — Resumen técnico de la idea
   - `proposed_plan` — Lista de tareas del plan propuesto
   - `plan_approved` — Control de aprobación humana (Gate 1)
+  - `tasks` — Lista oficial de tareas a ejecutar (copia del plan aprobado)
+  - `current_task_index` — Índice de la tarea actual en ejecución
+  - `human_feedback` — Feedback correctivo del humano o del reflector QA
 
 ### Frontend (`/frontend`)
 
@@ -57,8 +61,10 @@ Monorepositorio con dos componentes principales:
 | Iconos | Lucide React | Iconografía moderna y ligera |
 | Hook | `use-api-chat` | Lógica de estado, envío y reinicio del chat |
 
-- **Chat interactivo:** Input multilínea, indicador de escritura, timestamps, mensaje de "Generando plan..." con timeout de 120s
+- **Chat interactivo:** Input multilínea, indicador de escritura, timestamps, mensajes de "Generando plan..." y "Generando entregable técnico..." con timeout de 120s
 - **Aprobación de plan:** Sección de plan propuesto con tareas numeradas y botones de aprobar/solicitar cambios
+- **Aprobación de entregable:** Cada tarea finalizada se muestra con renderizado Markdown + diagramas Mermaid.js. Botones de aprobar/rechazar tarea con textarea de feedback (Gate 2)
+- **Renderizado Mermaid:** Componente `DeliverableView` que parsea el entregable Markdown, extrae bloques ` ```mermaid ` y los renderiza con la librería Mermaid.js; muestra el código raw en caso de error de sintaxis
 - **Panel de control:** Timeline de progreso (fase activa), plan de trabajo, resumen técnico, sidebar colapsable
 - **Flujo en dos pasos:** Primero triage (`/api/chat`), luego planificación (`/api/plan`) para evitar timeouts del LLM
 - **Toggle:** Cambio entre modo oscuro y claro
@@ -152,12 +158,12 @@ idea-lab-poc/
 ├── backend/
 │   ├── app/
 │   │   ├── agents/
-│   │   │   ├── graph.py          # Grafo de LangGraph compilado
+│   │   │   ├── graph.py          # Grafo LangGraph (4 nodos + 2 interrupts HITL)
 │   │   │   ├── state.py          # SoftwareFactoryState (TypedDict)
-│   │   │   ├── prompts.py        # Prompts y esquemas Pydantic
-│   │   │   └── nodes.py          # Lógica de cada nodo del grafo
+│   │   │   ├── prompts.py        # Prompts y esquemas Pydantic (Triage, Planner, Executor, Reflector, QA)
+│   │   │   └── nodes.py          # Lógica de nodos: triage, planner, executor, reflector
 │   │   ├── api/
-│   │   │   └── routes.py         # Endpoints FastAPI (/chat)
+│   │   │   └── routes.py         # Endpoints FastAPI (/chat, /plan, /approve-plan, /approve-task)
 │   │   ├── core/
 │   │   │   ├── config.py         # Settings con Pydantic
 │   │   │   ├── llm.py            # Factoría de LLMs (Gemini/Groq)
@@ -174,10 +180,10 @@ idea-lab-poc/
 │   │   │   ├── page.tsx          # Página principal (chat + dashboard)
 │   │   │   └── project/[id]/     # Página de proyecto (placeholder)
 │   │   ├── components/
-│   │   │   ├── chat-box.tsx      # Componente principal del chat
-│   │   │   ├── chat-message.tsx  # Burbuja de mensaje con avatar
-│   │   │   ├── dashboard.tsx     # Sidebar con timeline y resumen
-│   │   │   └── diagram.tsx       # Renderizador Mermaid (pendiente)
+│   │   │   ├── chat-box.tsx          # Componente principal del chat
+│   │   │   ├── chat-message.tsx      # Burbuja de mensaje con avatar
+│   │   │   ├── dashboard.tsx         # Sidebar con timeline y resumen
+│   │   │   └── deliverable-view.tsx   # Renderizador Markdown + Mermaid.js
 │   │   ├── hooks/
 │   │   │   └── use-api-chat.ts   # Hook con lógica de estado
 │   │   └── lib/
@@ -201,7 +207,8 @@ idea-lab-poc/
 - [x] Endpoints `/api/plan` y `/api/approve-plan` con interrupt HITL
 - [x] UI de aprobación con tareas, botones de aprobar/rechazar y feedback
 - [x] Timeout de 120s y flujo en dos pasos para evitar cortes del LLM
-- [ ] Fase 3: Executor Agent con diagramas Mermaid.js
-- [ ] Fase 4: Aprobación de entregables con Gate 2
+- [x] Fase 3: Executor Agent, Reflector QA, bucle de tareas y Gate 2 de aprobación
+- [x] Renderizado de entregables con Markdown + diagramas Mermaid.js
+- [x] Interrupción HITL en planner y reflector con reanudación automática
 - [ ] Integración de base de datos PostgreSQL (Neon)
-- [ ] Persistencia de proyectos y historial
+- [ ] Persistencia de proyectos e historial de sesiones
