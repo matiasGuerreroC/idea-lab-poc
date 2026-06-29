@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 
 interface Message {
@@ -10,14 +10,29 @@ interface Message {
   timestamp: Date;
 }
 
+interface TaskItem {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  deliverable: string | null;
+}
+
 interface ChatBoxProps {
   messages: Message[];
   input: string;
   setInput: (value: string) => void;
   loading: boolean;
   isReady: boolean;
+  waitingForApproval: boolean;
+  proposedPlan: TaskItem[] | null;
+  approvalLoading: boolean;
+  feedback: string;
+  setFeedback: (value: string) => void;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   sendMessage: () => void;
+  approvePlan: () => void;
+  rejectPlan: () => void;
   threadId: string;
 }
 
@@ -27,8 +42,15 @@ export function ChatBox({
   setInput,
   loading,
   isReady,
+  waitingForApproval,
+  proposedPlan,
+  approvalLoading,
+  feedback,
+  setFeedback,
   messagesEndRef,
   sendMessage,
+  approvePlan,
+  rejectPlan,
   threadId,
 }: ChatBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -54,7 +76,7 @@ export function ChatBox({
     <div className="flex flex-col h-full bg-white dark:bg-slate-950">
       <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-600 dark:to-blue-700">
         <h1 className="text-lg font-bold text-white tracking-tight">
-          Idea Lab - Triage
+          Idea Lab - {waitingForApproval ? "Planificación" : "Triage"}
         </h1>
         <p className="text-xs text-blue-100 font-mono">
           Conversación: {threadId}
@@ -70,6 +92,79 @@ export function ChatBox({
             timestamp={msg.timestamp}
           />
         ))}
+
+        {waitingForApproval && proposedPlan && (
+          <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+                <CheckCircle2 className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                  Plan Propuesto
+                </h3>
+                <p className="text-xs text-blue-500 dark:text-blue-400">
+                  Revisa el plan y aprueba o solicita cambios
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {proposedPlan.map((task, index) => (
+                <div
+                  key={task.id}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-bold">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                        {task.title}
+                      </h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                        {task.description}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Si necesitas cambios, describe qué modificar..."
+                rows={2}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={approvePlan}
+                  disabled={approvalLoading}
+                  className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                >
+                  {approvalLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  Aprobar Plan
+                </button>
+                <button
+                  onClick={rejectPlan}
+                  disabled={approvalLoading}
+                  className="flex-1 flex items-center justify-center gap-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 text-red-600 dark:text-red-400 py-2.5 rounded-xl text-sm font-semibold transition-colors border border-red-200 dark:border-red-800"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Solicitar Cambios
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {loading && (
           <div className="flex gap-3">
@@ -101,9 +196,11 @@ export function ChatBox({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={loading || isReady}
+            disabled={loading || isReady || waitingForApproval}
             placeholder={
-              isReady
+              waitingForApproval
+                ? "Esperando aprobación del plan..."
+                : isReady
                 ? "Idea lista para planificación..."
                 : "Escribe tu idea..."
             }
@@ -112,7 +209,7 @@ export function ChatBox({
           />
           <button
             type="submit"
-            disabled={loading || isReady || !input.trim()}
+            disabled={loading || isReady || waitingForApproval || !input.trim()}
             className="flex-shrink-0 w-10 h-10 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl flex items-center justify-center transition-colors"
           >
             {loading ? (

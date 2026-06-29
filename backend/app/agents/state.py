@@ -15,3 +15,9 @@ class SoftwareFactoryState(TypedDict):
     
     # Resumen estructurado de la idea técnica listo para el Planner
     final_idea: Optional[str]
+
+    # Plan de trabajo propuesto por el Planner Agent (lista de tareas)
+    proposed_plan: Optional[list[dict]]
+
+    # Indica si el usuario ha aprobado el plan (Gate 1)
+    plan_approved: bool

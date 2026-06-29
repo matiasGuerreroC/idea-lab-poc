@@ -7,11 +7,23 @@ import {
   Circle,
   RotateCcw,
   FileText,
+  List,
 } from "lucide-react";
+
+interface TaskItem {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  deliverable: string | null;
+}
 
 interface DashboardProps {
   isReady: boolean;
+  waitingForApproval: boolean;
+  planApproved: boolean;
   finalIdea: string | null;
+  proposedPlan: TaskItem[] | null;
   onReset: () => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -26,12 +38,17 @@ const phases = [
 
 export function Dashboard({
   isReady,
+  waitingForApproval,
+  planApproved,
   finalIdea,
+  proposedPlan,
   onReset,
   sidebarOpen,
   setSidebarOpen,
 }: DashboardProps) {
-  const activeIndex = isReady ? 1 : 0;
+  let activeIndex = 0;
+  if (planApproved) activeIndex = 2;
+  else if (waitingForApproval || isReady) activeIndex = 1;
 
   return (
     <>
@@ -113,22 +130,47 @@ export function Dashboard({
             </div>
           </div>
 
+          {proposedPlan && (
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2 mb-3">
+                <List className="w-3.5 h-3.5 text-purple-400" />
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Plan de Trabajo
+                </span>
+              </div>
+              <div className="space-y-2">
+                {proposedPlan.map((task) => (
+                  <div
+                    key={task.id}
+                    className="bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl p-3"
+                  >
+                    <p className="text-xs font-semibold text-purple-700 dark:text-purple-300">
+                      {task.title}
+                    </p>
+                    <p className="text-xs text-purple-500 dark:text-purple-400 mt-1 line-clamp-2">
+                      {task.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
             <div className="flex items-center gap-2 mb-2">
-              <FileText className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+              <FileText className="w-3.5 h-3.5 text-slate-400" />
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 Resumen Técnico
               </span>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4 h-72 overflow-y-auto">
+            <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4 h-40 overflow-y-auto">
               {finalIdea ? (
-                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-mono whitespace-pre-wrap">
+                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
                   {finalIdea}
                 </p>
               ) : (
                 <p className="text-xs text-slate-400 dark:text-slate-600 italic">
-                  El resumen técnico se generará automáticamente cuando la idea
-                  esté lo suficientemente clara.
+                  El resumen técnico se generará cuando la idea esté clara.
                 </p>
               )}
             </div>

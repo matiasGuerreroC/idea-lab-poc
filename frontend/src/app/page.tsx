@@ -37,8 +37,15 @@ export default function Home() {
             setInput={chat.setInput}
             loading={chat.loading}
             isReady={chat.isReady}
+            waitingForApproval={chat.waitingForApproval}
+            proposedPlan={chat.proposedPlan}
+            approvalLoading={chat.approvalLoading}
+            feedback={chat.feedback}
+            setFeedback={chat.setFeedback}
             messagesEndRef={chat.messagesEndRef}
             sendMessage={chat.sendMessage}
+            approvePlan={chat.approvePlan}
+            rejectPlan={chat.rejectPlan}
             threadId={chat.threadId}
           />
         </div>
@@ -46,7 +53,10 @@ export default function Home() {
 
       <Dashboard
         isReady={chat.isReady}
+        waitingForApproval={chat.waitingForApproval}
+        planApproved={chat.planApproved}
         finalIdea={chat.finalIdea}
+        proposedPlan={chat.proposedPlan}
         onReset={chat.resetChat}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
