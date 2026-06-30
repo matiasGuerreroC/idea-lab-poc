@@ -210,11 +210,19 @@ export function useApiChat() {
 
       if (!response.ok) throw new Error("Error al rechazar el plan.");
 
-      setPlanApproved(false);
-      setWaitingForApproval(false);
-      setProposedPlan(null);
-      setIsReady(false);
-      setFeedback("");
+      const data = await response.json();
+
+      if (data.proposed_plan && data.proposed_plan.length > 0) {
+        setProposedPlan(data.proposed_plan);
+        setWaitingForApproval(true);
+        setFeedback("");
+      } else {
+        setPlanApproved(false);
+        setWaitingForApproval(false);
+        setProposedPlan(null);
+        setIsReady(false);
+        setFeedback("");
+      }
     } catch (err) {
       console.error(err);
       setError("Error al rechazar el plan.");

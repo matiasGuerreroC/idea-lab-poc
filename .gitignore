@@ -43,3 +43,6 @@ npm-debug.log*
 # Database (SQLite - no aplica si usas Neon/PostgreSQL, pero por si acaso)
 *.db
 *.sqlite
+
+# Opencode
+opencode.json

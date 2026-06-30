@@ -23,6 +23,12 @@ def route_after_triage(state: SoftwareFactoryState):
 def route_task_loop(state: SoftwareFactoryState):
     tasks = state.get("tasks", [])
     idx = state.get("current_task_index", 0)
+    feedback = state.get("human_feedback")
+    plan_approved = state.get("plan_approved", False)
+
+    if feedback and not plan_approved:
+        return "planner"
+
     if idx >= len(tasks):
         return "consolidator"
     return "executor"
@@ -40,7 +46,7 @@ def route_after_reflector(state: SoftwareFactoryState):
 
 
 workflow.add_conditional_edges("triage", route_after_triage)
-workflow.add_conditional_edges("planner", route_task_loop, {"executor": "executor", "consolidator": "consolidator", END: END})
+workflow.add_conditional_edges("planner", route_task_loop, {"planner": "planner", "executor": "executor", "consolidator": "consolidator", END: END})
 
 workflow.add_conditional_edges("executor", lambda x: "reflector", {"reflector": "reflector"})
 workflow.add_conditional_edges("reflector", route_after_reflector, {"executor": "executor", "consolidator": "consolidator", END: END})

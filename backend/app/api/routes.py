@@ -93,6 +93,7 @@ async def approve_plan(request: PlanApprovalRequest):
             final_state_dict = compiled_graph.invoke(None, config=config)
 
         return {
+            "proposed_plan": final_state_dict.get("proposed_plan", []),
             "tasks": final_state_dict.get("tasks", []),
             "current_task_index": final_state_dict.get("current_task_index", 0),
             "final_specification": final_state_dict.get("final_specification"),

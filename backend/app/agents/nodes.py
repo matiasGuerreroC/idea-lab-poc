@@ -39,17 +39,24 @@ def planner_node(state: SoftwareFactoryState) -> dict:
     """
     Nodo de Planificación. Toma la idea estructurada final y genera
     un plan de tareas técnicas secuenciales.
+    Si hay feedback del usuario (re-planificación), lo incorpora.
     """
     llm = get_llm(settings.PLANNER_PROVIDER, settings.PLANNER_MODEL)
 
     structured_llm = llm.with_structured_output(ProposedPlan)
 
     final_idea = state.get("final_idea", "")
+    feedback = state.get("human_feedback", "")
 
     messages_payload = [
         SystemMessage(content=PLANNER_SYSTEM_PROMPT),
         SystemMessage(content=f"Idea de negocio del usuario consolidada:\n{final_idea}")
     ]
+
+    if feedback and feedback != "__APPROVED__":
+        messages_payload.append(
+            SystemMessage(content=f"FEEDBACK DEL USUARIO (incorpora este feedback en el nuevo plan):\n{feedback}")
+        )
 
     result: ProposedPlan = structured_llm.invoke(messages_payload)
 
@@ -66,7 +73,8 @@ def planner_node(state: SoftwareFactoryState) -> dict:
 
     return {
         "proposed_plan": tasks_dict_list,
-        "plan_approved": False
+        "plan_approved": False,
+        "human_feedback": None
     }
 
 
