@@ -97,6 +97,7 @@ export function useApiChat() {
     async (text?: string) => {
       const messageText = text || input;
       if (!messageText.trim() || loading || planning || isReady || waitingForApproval || waitingForTaskApproval) return;
+      if (!llmConfig) return;
 
       const userText = messageText.trim();
       setInput("");

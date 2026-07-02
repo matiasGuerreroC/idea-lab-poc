@@ -31,12 +31,14 @@ class TaskApprovalRequest(BaseModel):
 
 @router.post("/chat")
 async def chat_with_triage(request: ChatRequest):
+    if not request.provider or not request.model:
+        raise HTTPException(status_code=400, detail="Debes seleccionar un proveedor y modelo antes de iniciar el chat.")
     try:
         config = {"configurable": {"thread_id": request.thread_id}}
         input_data = {
             "messages": [("user", request.message)],
-            "llm_provider": request.provider or settings.LLM_PROVIDER,
-            "llm_model": request.model or settings.LLM_MODEL,
+            "llm_provider": request.provider,
+            "llm_model": request.model,
         }
         final_state = compiled_graph.invoke(input_data, config=config)
 
