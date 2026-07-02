@@ -1,7 +1,11 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from app.agents.graph import compiled_graph
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -9,6 +13,8 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     thread_id: str
     message: str
+    provider: Optional[str] = None
+    model: Optional[str] = None
 
 
 class PlanApprovalRequest(BaseModel):
@@ -27,7 +33,11 @@ class TaskApprovalRequest(BaseModel):
 async def chat_with_triage(request: ChatRequest):
     try:
         config = {"configurable": {"thread_id": request.thread_id}}
-        input_data = {"messages": [("user", request.message)]}
+        input_data = {
+            "messages": [("user", request.message)],
+            "llm_provider": request.provider or settings.LLM_PROVIDER,
+            "llm_model": request.model or settings.LLM_MODEL,
+        }
         final_state = compiled_graph.invoke(input_data, config=config)
 
         last_message = final_state["messages"][-1].content
@@ -38,6 +48,7 @@ async def chat_with_triage(request: ChatRequest):
             "final_idea": final_state.get("final_idea"),
         }
     except Exception as e:
+        logger.exception("Error en /chat")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -65,6 +76,7 @@ async def generate_plan(request: ChatRequest):
             "final_idea": final_state.get("final_idea"),
         }
     except Exception as e:
+        logger.exception("Error en /plan")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -99,6 +111,7 @@ async def approve_plan(request: PlanApprovalRequest):
             "final_specification": final_state_dict.get("final_specification"),
         }
     except Exception as e:
+        logger.exception("Error en /approve-plan")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -137,4 +150,5 @@ async def approve_task(request: TaskApprovalRequest):
             "final_specification": final_state_dict.get("final_specification"),
         }
     except Exception as e:
+        logger.exception("Error en /approve-task")
         raise HTTPException(status_code=500, detail=str(e))

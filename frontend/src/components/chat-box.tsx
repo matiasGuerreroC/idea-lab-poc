@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import {
   Send,
   Loader2,
@@ -11,6 +11,7 @@ import {
   ArrowRight,
   XCircle,
   Download,
+  Cpu,
 } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 import { DeliverableView } from "./deliverable-view";
@@ -58,6 +59,9 @@ interface ChatBoxProps {
   rejectTask: () => void;
   finalSpecification: string | null;
   finalIdea: string | null;
+  error?: string | null;
+  llmConfig: { provider: string; model: string; label: string } | null;
+  setLLMConfig: (config: { provider: string; model: string; label: string } | null) => void;
 }
 
 export function ChatBox({
@@ -89,8 +93,12 @@ export function ChatBox({
   rejectTask,
   finalSpecification,
   finalIdea,
+  error,
+  llmConfig,
+  setLLMConfig,
 }: ChatBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showModelSelector, setShowModelSelector] = useState(false);
   const currentTask = tasks[currentTaskIndex];
   const isTriage = !waitingForApproval && !waitingForTaskApproval && !finalSpecification && !executingTask;
 
@@ -163,20 +171,68 @@ export function ChatBox({
         </div>
       )}
 
+      {/* Error banner */}
+      {error && (
+        <div className="mx-4 lg:mx-margin-page mt-3 p-3 bg-tertiary/10 border border-tertiary rounded-xl">
+          <div className="flex items-start gap-2">
+            <XCircle className="w-4 h-4 text-tertiary shrink-0 mt-0.5" />
+            <div>
+              <p className="text-label-caps text-tertiary">Error</p>
+              <p className="text-body-md text-on-surface text-sm mt-1">{error}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 lg:px-margin-page py-4 lg:py-stack-md">
         <div className="max-w-4xl mx-auto space-y-3 lg:space-y-stack-md">
           {messages.length <= 1 && !loading && (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="flex flex-col items-center justify-center py-12 text-center">
               <div className="w-16 h-16 rounded-2xl bg-primary-container flex items-center justify-center text-on-primary-container mb-4">
                 <Smile className="w-8 h-8" />
               </div>
               <h2 className="text-headline-md text-on-surface mb-2">
                 ¿Qué idea tienes en mente?
               </h2>
-              <p className="text-body-md text-on-surface-variant max-w-md">
+              <p className="text-body-md text-on-surface-variant max-w-md mb-6">
                 Describe tu proyecto de software y el agente te guiará a través del proceso de especificación técnica.
               </p>
+
+              {!llmConfig && (
+                <div className="w-full max-w-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Cpu className="w-4 h-4 text-on-surface-variant" />
+                    <span className="text-label-caps text-on-surface-variant">
+                      SELECCIONA UN MODELO
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      { provider: "groq", model: "llama-3.3-70b-versatile", label: "Groq (Llama 3.3 70B)" },
+                      { provider: "groq", model: "openai/gpt-oss-20b", label: "Groq (GPT-OSS 20B)" },
+                      { provider: "gemini", model: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.model}
+                        onClick={() => {
+                          setLLMConfig(opt);
+                          setShowModelSelector(false);
+                        }}
+                        className="flex items-center gap-3 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant rounded-xl px-4 py-3 text-left transition-all"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary-container shrink-0">
+                          <Cpu className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-body-md text-on-surface font-medium">{opt.label}</p>
+                          <p className="text-code-sm text-on-surface-variant font-mono">{opt.model}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -446,8 +502,10 @@ export function ChatBox({
                 : waitingForApproval
                 ? "Esperando aprobación del plan..."
                 : isReady
-                ? "Idea lista para planificación..."
-                : "Proporciona contexto arquitectónico adicional..."
+              ? "Idea lista para planificación..."
+              : !llmConfig
+              ? "Selecciona un modelo arriba para comenzar..."
+              : "Proporciona contexto arquitectónico adicional..."
             }
             rows={1}
             className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-3 lg:px-4 py-2.5 lg:py-3 pr-24 lg:pr-28 text-body-md text-sm lg:text-body-md focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all resize-none disabled:opacity-50 text-on-surface placeholder-on-surface-variant"
@@ -455,7 +513,7 @@ export function ChatBox({
           <div className="absolute bottom-1.5 lg:bottom-2 right-1.5 lg:right-2 flex gap-2">
             <button
               type="submit"
-              disabled={loading || isReady || waitingForApproval || waitingForTaskApproval || !input.trim()}
+              disabled={loading || isReady || waitingForApproval || waitingForTaskApproval || !input.trim() || !llmConfig}
               className="bg-primary text-on-primary px-4 py-2 rounded-lg text-label-caps flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all disabled:opacity-50"
             >
               <span className="hidden sm:inline">ENVIAR</span>

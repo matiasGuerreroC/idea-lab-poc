@@ -16,8 +16,23 @@ interface TaskItem {
   deliverable: string | null;
 }
 
+type LLMConfig = {
+  provider: string;
+  model: string;
+  label: string;
+};
+
 const API_URL = "http://127.0.0.1:8000/api";
-const TIMEOUT_MS = 120_000;
+const TIMEOUT_MS = 180_000;
+
+async function extractErrorDetail(response: Response): Promise<string> {
+  try {
+    const body = await response.json();
+    return body.detail || response.statusText;
+  } catch {
+    return response.statusText;
+  }
+}
 
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
@@ -46,7 +61,6 @@ export function useApiChat() {
   const [threadId, setThreadId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Estado de Fase 3
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [waitingForTaskApproval, setWaitingForTaskApproval] = useState(false);
@@ -54,8 +68,9 @@ export function useApiChat() {
   const [taskFeedback, setTaskFeedback] = useState("");
   const [executingTask, setExecutingTask] = useState(false);
 
-  // Estado de Fase 4
   const [finalSpecification, setFinalSpecification] = useState<string | null>(null);
+
+  const [llmConfig, setLLMConfig] = useState<LLMConfig | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -91,12 +106,18 @@ export function useApiChat() {
       addMessage("user", userText);
 
       try {
+        const body: Record<string, any> = { thread_id: threadId, message: userText };
+        if (llmConfig) {
+          body.provider = llmConfig.provider;
+          body.model = llmConfig.model;
+        }
+
         const triageResponse = await fetchWithTimeout(
           `${API_URL}/chat`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ thread_id: threadId, message: userText }),
+            body: JSON.stringify(body),
           },
           TIMEOUT_MS
         );
@@ -154,7 +175,7 @@ export function useApiChat() {
         setPlanning(false);
       }
     },
-    [input, loading, planning, isReady, waitingForApproval, waitingForTaskApproval, threadId, addMessage]
+    [input, loading, planning, isReady, waitingForApproval, waitingForTaskApproval, threadId, llmConfig, addMessage]
   );
 
   const approvePlan = useCallback(async () => {
@@ -171,7 +192,10 @@ export function useApiChat() {
         TIMEOUT_MS
       );
 
-      if (!response.ok) throw new Error("Error al aprobar el plan.");
+      if (!response.ok) {
+        const detail = await extractErrorDetail(response);
+        throw new Error(detail);
+      }
 
       const data = await response.json();
       setPlanApproved(true);
@@ -184,7 +208,8 @@ export function useApiChat() {
       }
     } catch (err) {
       console.error(err);
-      setError("Error al aprobar el plan.");
+      const message = err instanceof Error ? err.message : "Error al aprobar el plan.";
+      setError(message);
     } finally {
       setApprovalLoading(false);
       setExecutingTask(false);
@@ -208,7 +233,10 @@ export function useApiChat() {
         TIMEOUT_MS
       );
 
-      if (!response.ok) throw new Error("Error al rechazar el plan.");
+      if (!response.ok) {
+        const detail = await extractErrorDetail(response);
+        throw new Error(detail);
+      }
 
       const data = await response.json();
 
@@ -225,7 +253,8 @@ export function useApiChat() {
       }
     } catch (err) {
       console.error(err);
-      setError("Error al rechazar el plan.");
+      const message = err instanceof Error ? err.message : "Error al rechazar el plan.";
+      setError(message);
     } finally {
       setApprovalLoading(false);
     }
@@ -331,6 +360,7 @@ export function useApiChat() {
     setInput("");
     setExecutingTask(false);
     setFinalSpecification(null);
+    setLLMConfig(null);
   }, []);
 
   return {
@@ -365,5 +395,7 @@ export function useApiChat() {
     finalSpecification,
     approveTask,
     rejectTask,
+    llmConfig,
+    setLLMConfig,
   };
 }

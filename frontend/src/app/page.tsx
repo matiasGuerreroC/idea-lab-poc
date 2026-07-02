@@ -78,6 +78,7 @@ export default function Home() {
             approvePlan={chat.approvePlan}
             rejectPlan={chat.rejectPlan}
             planning={chat.planning}
+            error={chat.error}
           />
         ) : (
           <ChatBox
@@ -109,6 +110,9 @@ export default function Home() {
             rejectTask={chat.rejectTask}
             finalSpecification={chat.finalSpecification}
             finalIdea={chat.finalIdea}
+            error={chat.error}
+            llmConfig={chat.llmConfig}
+            setLLMConfig={chat.setLLMConfig}
           />
         )}
       </div>

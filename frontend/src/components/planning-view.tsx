@@ -26,6 +26,7 @@ interface PlanningViewProps {
   approvePlan: () => void;
   rejectPlan: () => void;
   planning?: boolean;
+  error?: string | null;
 }
 
 export function PlanningView({
@@ -36,6 +37,7 @@ export function PlanningView({
   approvePlan,
   rejectPlan,
   planning,
+  error,
 }: PlanningViewProps) {
   return (
     <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
@@ -247,7 +249,20 @@ export function PlanningView({
         </div>
       </div>
 
-      {/* Planning loading overlay */}
+        {/* Error banner */}
+        {error && (
+          <div className="mx-4 lg:mx-margin-page mt-3 lg:mt-stack-sm p-3 lg:p-stack-md bg-tertiary/10 border border-tertiary rounded-xl">
+            <div className="flex items-start gap-2">
+              <XCircle className="w-4 h-4 text-tertiary shrink-0 mt-0.5" />
+              <div>
+                <p className="text-label-caps text-tertiary">Error</p>
+                <p className="text-body-md text-on-surface text-sm mt-1">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Planning loading overlay */}
       {planning && (
         <div className="absolute inset-0 bg-surface-container-lowest/80 backdrop-blur-sm z-30 flex items-center justify-center">
           <div className="glass-panel rounded-2xl p-6 lg:p-8 flex flex-col items-center gap-4">

@@ -43,7 +43,7 @@ Monorepositorio con dos componentes principales:
 - **Interrupción HITL:** LangGraph se detiene después del planner y del reflector (`interrupt_after=["planner", "reflector"]`) hasta que el usuario apruebe
 - **Bucle QA interno:** El agente Reflector valida cada entregable. Si el QA automatizado falla, el Executor re-ejecuta la tarea sin interrumpir al usuario
 - **Consolidación final:** Al terminar todas las tareas, el agente Consolidador unifica los entregables en un documento maestro (`final_specification`)
-- **Enrutamiento de modelos:** Cada agente (Triage, Planner, Executor) puede usar un proveedor y modelo diferente
+- **Enrutamiento de modelos:** Triage usa un modelo separado (CHAT) para conversación rápida, mientras que Planner, Executor, Reflector y Consolidator comparten un modelo más potente (WORK). El usuario selecciona el proveedor/modelo al inicio del chat mediante un dropdown en la UI (Groq o Gemini). La selección se envía en el primer request a `/api/chat` y persiste en `SoftwareFactoryState.llm_provider`/`llm_model` durante toda la sesión.
 - **Estado global:** `SoftwareFactoryState` (TypedDict) con campos:
   - `messages` — Historial de la conversación
   - `is_ready_for_planning` — Indica si la idea está madura
@@ -54,6 +54,8 @@ Monorepositorio con dos componentes principales:
   - `current_task_index` — Índice de la tarea actual en ejecución
   - `human_feedback` — Feedback correctivo del humano o del reflector QA
   - `final_specification` — Documento maestro consolidado al finalizar todas las tareas (Fase 4)
+  - `llm_provider` — Proveedor seleccionado por el usuario (groq/gemini)
+  - `llm_model` — Modelo seleccionado por el usuario
 
 ### Frontend (`/frontend`)
 
@@ -64,6 +66,7 @@ Monorepositorio con dos componentes principales:
 | Iconos | Lucide React | Iconografía moderna y ligera |
 | Hook | `use-api-chat` | Lógica de estado, envío y reinicio del chat |
 
+- **Selección de modelo al inicio:** Dropdown con opciones (Groq Llama 3.3 70B, Groq GPT-OSS 20B, Gemini 2.5 Flash) que se muestra cuando no hay mensajes. La selección persiste durante toda la sesión.
 - **Chat interactivo:** Input multilínea, indicador de escritura, timestamps, mensajes de "Generando plan..." y "Generando entregable técnico..." con timeout de 120s
 - **Aprobación de plan:** Sección de plan propuesto con tareas numeradas y botones de aprobar/solicitar cambios
 - **Aprobación de entregable:** Cada tarea finalizada se muestra con renderizado Markdown + diagramas Mermaid.js. Botones de aprobar/rechazar tarea con textarea de feedback (Gate 2)
@@ -146,12 +149,19 @@ Configurar en `backend/.env` (copiar desde `.env.example`):
 |----------|-------------|------------------|
 | `GEMINI_API_KEY` | API Key de Google AI Studio | — |
 | `GROQ_API_KEY` | API Key de Groq | — |
-| `TRIAGE_PROVIDER` | Proveedor para el agente de Triage | `gemini` / `groq` |
-| `TRIAGE_MODEL` | Modelo para el agente de Triage | `gemini-2.5-flash`, etc. |
-| `PLANNER_PROVIDER` | Proveedor para el agente de Planificación | `gemini` / `groq` |
-| `PLANNER_MODEL` | Modelo para el agente de Planificación | `llama-3.3-70b-specdec`, etc. |
-| `EXECUTOR_PROVIDER` | Proveedor para el agente de Ejecución | `gemini` / `groq` |
-| `EXECUTOR_MODEL` | Modelo para el agente de Ejecución | `gemini-2.5-flash`, etc. |
+
+### Configuración de Modelos
+
+Los modelos se configuran directamente en `backend/app/core/config.py` (no en `.env`):
+
+| Variable | Descripción | Default |
+|----------|-------------|---------|
+| `LLM_PROVIDER` | Proveedor para agentes de trabajo (default) | `groq` |
+| `LLM_MODEL` | Modelo para agentes de trabajo (default) | `llama-3.3-70b-versatile` |
+| `LLM_MAX_TOKENS` | Límite de tokens de salida para agents de trabajo | `4096` |
+| `CHAT_PROVIDER` | Proveedor para Triage (default) | `groq` |
+| `CHAT_MODEL` | Modelo para Triage (default) | `openai/gpt-oss-20b` |
+| `CHAT_MAX_TOKENS` | Límite de tokens de salida para Triage | `2048` |
 
 ---
 

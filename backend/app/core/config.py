@@ -11,19 +11,16 @@ class Settings(BaseSettings):
 
     PORT: int = 8000
     HOST: str = "127.0.0.1"
-    
-    # Credenciales de proveedores
+
     GEMINI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None
 
-    # Enrutamiento de modelos por agente
-    TRIAGE_PROVIDER: str = "groq"
-    TRIAGE_MODEL: str = "llama-3.3-70b-versatile"
+    LLM_PROVIDER: str = "groq"
+    LLM_MODEL: str = "llama-3.3-70b-versatile"
+    LLM_MAX_TOKENS: int = 4096
 
-    PLANNER_PROVIDER: str = "groq"
-    PLANNER_MODEL: str = "llama-3.3-70b-versatile"
-
-    EXECUTOR_PROVIDER: str = "groq"
-    EXECUTOR_MODEL: str = "llama-3.3-70b-versatile"
+    CHAT_PROVIDER: str = "groq"
+    CHAT_MODEL: str = "openai/gpt-oss-20b"
+    CHAT_MAX_TOKENS: int = 2048
 
 settings = Settings()

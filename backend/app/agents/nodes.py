@@ -1,33 +1,39 @@
 from langchain_core.messages import SystemMessage, AIMessage
 from app.agents.state import SoftwareFactoryState
 from app.agents.prompts import TRIAGE_SYSTEM_PROMPT, TriageResult, PLANNER_SYSTEM_PROMPT, ProposedPlan, EXECUTOR_SYSTEM_PROMPT, REFLECTOR_SYSTEM_PROMPT, QAResult, CONSOLIDATOR_SYSTEM_PROMPT
-from app.core.llm import get_llm
+from app.core.llm import get_retry_llm
 from app.core.config import settings
 
+
+def safe_format(template: str, **kwargs) -> str:
+    result = template
+    for key, value in kwargs.items():
+        result = result.replace("{" + key + "}", str(value) if value is not None else "")
+    return result
+
+
+def _get_work_llm(state: SoftwareFactoryState):
+    provider = state.get("llm_provider", settings.LLM_PROVIDER)
+    model = state.get("llm_model", settings.LLM_MODEL)
+    return get_retry_llm(provider, model, settings.LLM_MAX_TOKENS)
+
+
+def _get_chat_llm(state: SoftwareFactoryState):
+    provider = state.get("llm_provider", settings.CHAT_PROVIDER)
+    model = state.get("llm_model", settings.CHAT_MODEL)
+    return get_retry_llm(provider, model, settings.CHAT_MAX_TOKENS)
+
+
 def triage_node(state: SoftwareFactoryState) -> dict:
-    """
-    Nodo de Triage. Evalúa la conversación actual para decidir si la idea
-    del usuario está lo suficientemente clara o si requiere más preguntas.
-    """
-    # 1. Obtener el modelo asignado al Triage
-    llm = get_llm(settings.TRIAGE_PROVIDER, settings.TRIAGE_MODEL)
-    
-    # 2. Forzar que el LLM responda estrictamente bajo el esquema Pydantic
-    structured_llm = llm.with_structured_output(TriageResult)
-    
-    # 3. Obtener los mensajes de forma segura usando .get() para diccionarios
     existing_messages = state.get("messages", [])
-    
-    # 4. Preparar la entrada del modelo
     messages_payload = [SystemMessage(content=TRIAGE_SYSTEM_PROMPT)] + list(existing_messages)
-    
-    # 5. Invocar al modelo
+
+    llm = _get_chat_llm(state)
+    structured_llm = llm.with_structured_output(TriageResult)
     result: TriageResult = structured_llm.invoke(messages_payload)
-    
-    # 6. Crear el nuevo mensaje del asistente
+
     new_assistant_message = AIMessage(content=result.response_to_user)
-    
-    # 7. Retornar las actualizaciones del estado como diccionario
+
     return {
         "messages": [new_assistant_message],
         "is_ready_for_planning": result.is_ready_for_planning,
@@ -36,15 +42,6 @@ def triage_node(state: SoftwareFactoryState) -> dict:
 
 
 def planner_node(state: SoftwareFactoryState) -> dict:
-    """
-    Nodo de Planificación. Toma la idea estructurada final y genera
-    un plan de tareas técnicas secuenciales.
-    Si hay feedback del usuario (re-planificación), lo incorpora.
-    """
-    llm = get_llm(settings.PLANNER_PROVIDER, settings.PLANNER_MODEL)
-
-    structured_llm = llm.with_structured_output(ProposedPlan)
-
     final_idea = state.get("final_idea", "")
     feedback = state.get("human_feedback", "")
 
@@ -58,6 +55,8 @@ def planner_node(state: SoftwareFactoryState) -> dict:
             SystemMessage(content=f"FEEDBACK DEL USUARIO (incorpora este feedback en el nuevo plan):\n{feedback}")
         )
 
+    llm = _get_work_llm(state)
+    structured_llm = llm.with_structured_output(ProposedPlan)
     result: ProposedPlan = structured_llm.invoke(messages_payload)
 
     tasks_dict_list = [
@@ -79,9 +78,6 @@ def planner_node(state: SoftwareFactoryState) -> dict:
 
 
 def executor_node(state: SoftwareFactoryState) -> dict:
-    """Ejecuta y genera el entregable técnico para la tarea actual."""
-    llm = get_llm(settings.EXECUTOR_PROVIDER, settings.EXECUTOR_MODEL)
-
     tasks = state.get("tasks", [])
     idx = state.get("current_task_index", 0)
 
@@ -92,7 +88,8 @@ def executor_node(state: SoftwareFactoryState) -> dict:
     final_idea = state.get("final_idea", "")
     feedback = state.get("human_feedback", "")
 
-    prompt = EXECUTOR_SYSTEM_PROMPT.format(
+    prompt = safe_format(
+        EXECUTOR_SYSTEM_PROMPT,
         final_idea=final_idea,
         task_title=current_task["title"],
         task_description=current_task["description"]
@@ -103,6 +100,7 @@ def executor_node(state: SoftwareFactoryState) -> dict:
     if feedback and feedback != "__APPROVED__":
         messages.append(SystemMessage(content=f"ATENCIÓN: Corrige el diseño considerando este feedback anterior: {feedback}"))
 
+    llm = _get_work_llm(state)
     response = llm.invoke(messages)
 
     updated_tasks = list(tasks)
@@ -115,10 +113,6 @@ def executor_node(state: SoftwareFactoryState) -> dict:
 
 
 def reflector_node(state: SoftwareFactoryState) -> dict:
-    """Realiza control de calidad automatizado del entregable generado."""
-    llm = get_llm(settings.EXECUTOR_PROVIDER, settings.EXECUTOR_MODEL)
-    structured_llm = llm.with_structured_output(QAResult)
-
     tasks = state.get("tasks", [])
     idx = state.get("current_task_index", 0)
     current_task = tasks[idx]
@@ -128,6 +122,8 @@ def reflector_node(state: SoftwareFactoryState) -> dict:
         SystemMessage(content=f"Tarea a evaluar: {current_task['title']}\nEntregable generado:\n{current_task['deliverable']}")
     ]
 
+    llm = _get_work_llm(state)
+    structured_llm = llm.with_structured_output(QAResult)
     qa_result: QAResult = structured_llm.invoke(messages)
 
     if not qa_result.is_valid:
@@ -141,9 +137,6 @@ def reflector_node(state: SoftwareFactoryState) -> dict:
 
 
 def consolidator_node(state: SoftwareFactoryState) -> dict:
-    """Nodo de Consolidacion (Fase 4). Agrupa todos los entregables aprobados y genera un documento maestro."""
-    llm = get_llm(settings.EXECUTOR_PROVIDER, settings.EXECUTOR_MODEL)
-
     tasks = state.get("tasks", [])
     final_idea = state.get("final_idea", "")
 
@@ -153,12 +146,14 @@ def consolidator_node(state: SoftwareFactoryState) -> dict:
         deliverables_text += f"Descripcion Original: {task['description']}\n\n"
         deliverables_text += f"Entregable Aprobado:\n{task.get('deliverable', 'No disponible.')}\n"
 
-    prompt = CONSOLIDATOR_SYSTEM_PROMPT.format(
+    prompt = safe_format(
+        CONSOLIDATOR_SYSTEM_PROMPT,
         final_idea=final_idea,
         approved_deliverables=deliverables_text
     )
 
     messages = [SystemMessage(content=prompt)]
+    llm = _get_work_llm(state)
     response = llm.invoke(messages)
 
     return {
